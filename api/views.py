@@ -75,7 +75,7 @@ def list_strings(request):
 
 @api_view(['GET'])
 def filter_nl(request):
-    query = request.GET.get('q')
+    query = request.GET.get('q') or request.GET.get('query')
     if query is None:
         return Response({'detail': 'missing query'}, status=400)
 
@@ -99,18 +99,33 @@ def filter_nl(request):
     if not parsed:
         return Response({'detail': 'Unable to parse natural language query'}, status=400)
 
-    request.GET = request.GET.copy()
-    for k, v in parsed.items():
-        request.GET[k] = str(v)
+    qs = AnalyzedString.objects.all()
 
-    resp = list_strings(request)
-    data = resp.data
-    data['interpreted_query'] = {
-        'original': query,
-        'parsed_filters': parsed
-    }
-    return Response(data)
+    if "is_palindrome" in parsed:
+        qs = qs.filter(is_palindrome=parsed["is_palindrome"])
 
+    if "min_length" in parsed:
+        qs = qs.filter(length__gte=parsed["min_length"])
+
+    if "max_length" in parsed:
+        qs = qs.filter(length__lte=parsed["max_length"])
+
+    if "word_count" in parsed:
+        qs = qs.filter(word_count=parsed["word_count"])
+
+    if "contains_character" in parsed:
+        qs = [q for q in qs if parsed["contains_character"] in q.character_frequency_map]
+
+    serializer = AnalyzedStringSerializer(qs, many=True)
+
+    return Response({
+        "data": serializer.data,
+        "count": len(serializer.data),
+        "interpreted_query": {
+            "original": query,
+            "parsed_filters": parsed
+        }
+    })
 
 @api_view(['DELETE'])
 def delete_string(request, string_value):
