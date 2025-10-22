@@ -28,9 +28,7 @@ def strings_view(request):
         serializer = AnalyzedStringSerializer(analyzed)
         return Response(serializer.data, status=201)
 
-    # ----------------------------
-    # GET /strings/ with filters
-    # ----------------------------
+
     qs = AnalyzedString.objects.all()
 
     # Query parameters
@@ -74,9 +72,6 @@ def strings_view(request):
     }, status=200)
 
 
-# ----------------------------
-# GET /strings/filter-by-natural-language/
-# ----------------------------
 @api_view(['GET'])
 def filter_nl(request):
     query = request.GET.get('query')
@@ -123,9 +118,6 @@ def filter_nl(request):
     }, status=200)
 
 
-# ----------------------------
-# GET /strings/{string_value}/ and DELETE /strings/{string_value}/
-# ----------------------------
 @api_view(['GET', 'DELETE'])
 def get_or_delete_string(request, string_value):
     hash_val = hashlib.sha256(string_value.encode('utf-8')).hexdigest()
