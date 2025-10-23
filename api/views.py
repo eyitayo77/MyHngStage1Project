@@ -6,26 +6,37 @@ from rest_framework.response import Response
 from rest_framework import status
 import hashlib, re
 
-
 @api_view(['GET', 'POST'])
 def strings_view(request):
     if request.method == 'POST':
-        if 'value' not in request.data:
-            return Response({'detail': 'Missing "value" field'}, status=status.HTTP_400_BAD_REQUEST)
+        value = request.data.get('value')
 
-        value = request.data['value']
+        if value is None:
+            return Response(
+                {'detail': 'Missing "value" field'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         if not isinstance(value, str):
-            return Response({'detail': '"value" must be a string'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        if value.strip() == "":
-            return Response({'detail': '"value" cannot be empty'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            return Response(
+                {'detail': '"value" must be a string'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
 
         hash_val = hashlib.sha256(value.encode('utf-8')).hexdigest()
+
         if AnalyzedString.objects.filter(id=hash_val).exists():
-            return Response({'detail': 'String already analyzed'}, status=status.HTTP_409_CONFLICT)
+            return Response(
+                {'detail': 'String already analyzed'},
+                status=status.HTTP_409_CONFLICT
+            )
 
         props = AnalyzedString.analyze_string(value)
-        analyzed = AnalyzedString.objects.create(id=hash_val, value=value, **props)
+        analyzed = AnalyzedString.objects.create(
+            id=hash_val,
+            value=value,
+            **props
+        )
         serializer = AnalyzedStringSerializer(analyzed)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -45,24 +56,32 @@ def strings_view(request):
 
         if min_length is not None:
             qs = qs.filter(length__gte=int(min_length))
+
         if max_length is not None:
             qs = qs.filter(length__lte=int(max_length))
+
         if word_count is not None:
             qs = qs.filter(word_count=int(word_count))
+
         if contains_character is not None:
-            qs = qs.filter(character_frequency_map__contains=contains_character)
+            qs = [q for q in qs if contains_character in q.character_frequency_map]
 
     except ValueError:
         return Response({'detail': 'Invalid query parameter values or types'}, status=status.HTTP_400_BAD_REQUEST)
 
     serializer = AnalyzedStringSerializer(qs, many=True)
-    filters_applied = {k: v for k, v in {
-        'is_palindrome': is_palindrome,
-        'min_length': min_length,
-        'max_length': max_length,
-        'word_count': word_count,
-        'contains_character': contains_character
-    }.items() if v is not None}
+
+    filters_applied = {}
+    if is_palindrome is not None:
+        filters_applied['is_palindrome'] = is_palindrome.lower() == 'true'
+    if min_length is not None:
+        filters_applied['min_length'] = int(min_length)
+    if max_length is not None:
+        filters_applied['max_length'] = int(max_length)
+    if word_count is not None:
+        filters_applied['word_count'] = int(word_count)
+    if contains_character is not None:
+        filters_applied['contains_character'] = contains_character
 
     return Response({
         'data': serializer.data,
@@ -100,7 +119,7 @@ def filter_nl(request):
     if "word_count" in parsed:
         qs = qs.filter(word_count=parsed["word_count"])
     if "contains_character" in parsed:
-        qs = qs.filter(character_frequency_map__contains=parsed["contains_character"])
+        qs = [q for q in qs if parsed["contains_character"] in q.character_frequency_map]
 
     serializer = AnalyzedStringSerializer(qs, many=True)
     return Response({
@@ -125,4 +144,4 @@ def get_or_delete_string(request, string_value):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     obj.delete()
-    return Response({'detail': 'String deleted successfully'}, status=status.HTTP_200_OK)
+    return Response(status=status.HTTP_204_NO_CONTENT)
