@@ -1,3 +1,4 @@
+
 from django.shortcuts import get_object_or_404
 from .models import AnalyzedString
 from .serializers import AnalyzedStringSerializer
@@ -64,7 +65,7 @@ def strings_view(request):
             qs = qs.filter(word_count=int(word_count))
 
         if contains_character is not None:
-            qs = [q for q in qs if contains_character in q.character_frequency_map]
+            qs = [q for q in qs if contains_character.lower() in q.value.lower()]
 
     except ValueError:
         return Response({'detail': 'Invalid query parameter values or types'}, status=status.HTTP_400_BAD_REQUEST)
@@ -119,10 +120,11 @@ def filter_nl(request):
     if "word_count" in parsed:
         qs = qs.filter(word_count=parsed["word_count"])
     if "contains_character" in parsed:
-        qs = [q for q in qs if parsed["contains_character"] in q.character_frequency_map]
+        qs = [q for q in qs if parsed["contains_character"].lower() in q.value.lower()]
 
     serializer = AnalyzedStringSerializer(qs, many=True)
-    return Response({
+    return Response(
+        {
         "data": serializer.data,
         "count": len(serializer.data),
         "interpreted_query": {
@@ -134,6 +136,7 @@ def filter_nl(request):
 
 @api_view(['GET', 'DELETE'])
 def get_or_delete_string(request, string_value):
+    string_value = string_value.strip()
     hash_val = hashlib.sha256(string_value.encode('utf-8')).hexdigest()
     obj = AnalyzedString.objects.filter(pk=hash_val).first()
     if not obj:

@@ -1,3 +1,4 @@
+
 from django.db import models
 import hashlib
 
@@ -22,7 +23,7 @@ class AnalyzedString(models.Model):
 
         hash_val = hashlib.sha256(s.encode('utf-8')).hexdigest()
         length = len(s)
-        is_palindrome = s.lower() == s[::-1]
+        is_palindrome = s.lower() == s[::-1].lower()
         unique_characters = len(set(s))
         word_count = len(s.split())
         freq = {}
