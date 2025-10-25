@@ -1,4 +1,3 @@
-
 from django.shortcuts import get_object_or_404
 from .models import AnalyzedString
 from .serializers import AnalyzedStringSerializer
@@ -7,39 +6,33 @@ from rest_framework.response import Response
 from rest_framework import status
 import hashlib, re
 
+
 @api_view(['GET', 'POST'])
 def strings_view(request):
     if request.method == 'POST':
         value = request.data.get('value')
 
         if value is None:
-            return Response(
-                {'detail': 'Missing "value" field'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({'detail': 'Missing "value" field'}, status=status.HTTP_400_BAD_REQUEST)
         if not isinstance(value, str):
-            return Response(
-                {'detail': '"value" must be a string'},
-                status=status.HTTP_422_UNPROCESSABLE_ENTITY
-            )
+            return Response({'detail': '"value" must be a string'}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        value = value.strip()
+        if not value:
+            return Response({'detail': '"value" cannot be empty'}, status=status.HTTP_400_BAD_REQUEST)
 
         hash_val = hashlib.sha256(value.encode('utf-8')).hexdigest()
-
         if AnalyzedString.objects.filter(id=hash_val).exists():
-            return Response(
-                {'detail': 'String already analyzed'},
-                status=status.HTTP_409_CONFLICT
-            )
+            return Response({'detail': 'String already analyzed'}, status=status.HTTP_409_CONFLICT)
 
-        props = AnalyzedString.analyze_string(value)
-        analyzed = AnalyzedString.objects.create(
-            id=hash_val,
-            value=value,
-            **props
-        )
-        serializer = AnalyzedStringSerializer(analyzed)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        try:
+            props = AnalyzedString.analyze_string(value)
+            analyzed = AnalyzedString.objects.create(id=hash_val, value=value, **props)
+            serializer = AnalyzedStringSerializer(analyzed)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({'detail': f'Error creating string: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     qs = AnalyzedString.objects.all()
 
@@ -57,32 +50,25 @@ def strings_view(request):
 
         if min_length is not None:
             qs = qs.filter(length__gte=int(min_length))
-
         if max_length is not None:
             qs = qs.filter(length__lte=int(max_length))
-
         if word_count is not None:
             qs = qs.filter(word_count=int(word_count))
-
         if contains_character is not None:
             qs = [q for q in qs if contains_character.lower() in q.value.lower()]
-
     except ValueError:
         return Response({'detail': 'Invalid query parameter values or types'}, status=status.HTTP_400_BAD_REQUEST)
 
     serializer = AnalyzedStringSerializer(qs, many=True)
-
-    filters_applied = {}
-    if is_palindrome is not None:
-        filters_applied['is_palindrome'] = is_palindrome.lower() == 'true'
-    if min_length is not None:
-        filters_applied['min_length'] = int(min_length)
-    if max_length is not None:
-        filters_applied['max_length'] = int(max_length)
-    if word_count is not None:
-        filters_applied['word_count'] = int(word_count)
-    if contains_character is not None:
-        filters_applied['contains_character'] = contains_character
+    filters_applied = {
+        k: v for k, v in {
+            'is_palindrome': is_palindrome,
+            'min_length': min_length,
+            'max_length': max_length,
+            'word_count': word_count,
+            'contains_character': contains_character
+        }.items() if v is not None
+    }
 
     return Response({
         'data': serializer.data,
@@ -123,8 +109,7 @@ def filter_nl(request):
         qs = [q for q in qs if parsed["contains_character"].lower() in q.value.lower()]
 
     serializer = AnalyzedStringSerializer(qs, many=True)
-    return Response(
-        {
+    return Response({
         "data": serializer.data,
         "count": len(serializer.data),
         "interpreted_query": {
@@ -137,8 +122,8 @@ def filter_nl(request):
 @api_view(['GET', 'DELETE'])
 def get_or_delete_string(request, string_value):
     string_value = string_value.strip()
-    hash_val = hashlib.sha256(string_value.encode('utf-8')).hexdigest()
-    obj = AnalyzedString.objects.filter(pk=hash_val).first()
+    obj = AnalyzedString.objects.filter(value=string_value).first()
+
     if not obj:
         return Response({'detail': 'String not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -146,5 +131,6 @@ def get_or_delete_string(request, string_value):
         serializer = AnalyzedStringSerializer(obj)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    obj.delete()
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    if request.method == 'DELETE':
+        obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
